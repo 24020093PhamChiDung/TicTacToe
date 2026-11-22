@@ -46,12 +46,12 @@ def expand(node, mode="Random"):
             key=lambda m: _score_cell(st.grid, st.size, m[0], m[1], mover, st.win_length)
         )
         node.ordered = True
-        row, col = node.untried_moves.pop()
-        new_state = node.state.clone()
-        new_state.make_move(row, col, mover)
-        child = MCTSNode(new_state, parent=node, move=(row, col), player=mover)
-        node.children.append(child)
-        return child
+    row, col = node.untried_moves.pop()
+    new_state = node.state.clone()
+    new_state.make_move(row, col, mover)
+    child = MCTSNode(new_state, parent=node, move=(row, col), player=mover)
+    node.children.append(child)
+    return child
 
 def _line_info(grid, size, r, c, player):
     best_len, best_open = 1, 0
@@ -71,7 +71,7 @@ def _line_info(grid, size, r, c, player):
             best_open = open_ends
     return best_len, best_open
 
-def _score_cell(grid, size, r, c, win_len):
+def _score_cell(grid, size, r, c, me, win_len):
     """Diem uu tien cua o (r, c): thang > chan thua > chuoi 4 > chan 4 > chuoi 3 > chan 3."""
     my_len, my_open = _line_info(grid, size, r, c, me)
     op_len, op_open = _line_info(grid, size, r, c, -me)
