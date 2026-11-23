@@ -1,309 +1,293 @@
-"""Minimax va Alpha-Beta cho Gomoku 20x20, tuong thich voi board.py cua nhom.
+"""Thuat toan Minimax & Alpha-Beta cho Tic-Tac-Toe / Gomoku 20x20.
 
-Board API duoc su dung:
-    board.grid
-    board.size, board.win_length
-    board.clone()
-    board.make_move(row, col, player)
-    board.check_winner()
-    board.is_full()
-    board.get_candidate_moves(radius=1)
+Thanh vien 2 phu trach file nay. Cac ham chinh:
+    - evaluate_board(board, player)          : ham heuristic danh gia the co
+    - minimax(...)                           : Minimax thuan, dem node
+    - alpha_beta(...)                        : Minimax + cat tia Alpha-Beta, dem node
+    - get_best_move_minimax(...)             : tra ve (nuoc di toi uu, so node da duyet)
 
-Quy uoc: X = 1 (MAX), O = -1 (MIN), o trong = 0.
+Quy uoc diem: diem > 0 co loi cho `player` (quan dang duoc danh gia), < 0 bat loi.
+`node_counter` la list 1 phan tu, vd [0]; moi node ghe tham se tang node_counter[0] them 1.
 """
 
-from math import inf
-from typing import Optional, Tuple, Any
+from typing import List, Optional, Tuple
 
-EMPTY = 0
-X_PLAYER = 1
-O_PLAYER = -1
-WIN_SCORE = 10**12
+from board import Board, EMPTY, X, O, DIRECTIONS
 
-DIRECTIONS = ((0, 1), (1, 0), (1, 1), (1, -1))
+# --------------------------------------------------------------------------- #
+# HANG SO
+# --------------------------------------------------------------------------- #
+INF = float("inf")
+WIN_SCORE = 10 ** 9          # "vo cung" cho chuoi 5 (huu han de cong/tru depth duoc)
 
+# Bang diem cho chuoi: SCORES[do_dai] = (diem khi ho 1 dau, diem khi ho 2 dau)
+# Chuoi bi chan ca 2 dau => 0 diem (khong the thanh 5).
+SCORES = {
+    4: (1_000, 10_000),
+    3: (100, 1_000),
+    2: (1, 10),          # khong co trong de bai, them de AI biet phat trien the co
+}
 
-def _grid(board):
-    """Lay ma tran tu doi tuong Board hoac tu ma tran 2 chieu."""
-    return board.grid if hasattr(board, "grid") else board
-
-
-def _win_length(board):
-    return getattr(board, "win_length", 5)
-
-
-def _count_nodes(counter):
-    if counter is None:
-        return
-    if isinstance(counter, dict):
-        counter["count"] = counter.get("count", 0) + 1
-    elif isinstance(counter, list):
-        if counter:
-            counter[0] += 1
-        else:
-            counter.append(1)
-    else:
-        raise TypeError("node_counter phai la dict, list hoac None")
+# So nuoc di toi da xet o moi node (sau khi sap xep). Giu nhanh voi ban 20x20.
+DEFAULT_MAX_BRANCH = 12
 
 
-def _nodes_value(counter):
-    if counter is None:
-        return 0
-    if isinstance(counter, dict):
-        return counter.get("count", 0)
-    return counter[0] if counter else 0
+# --------------------------------------------------------------------------- #
+# 1. HAM LUONG GIA (HEURISTIC)
+# --------------------------------------------------------------------------- #
+def evaluate_board(board: Board, player: int = X) -> int:
+    """Danh gia the co tu goc nhin cua `player`.
 
+    Quet moi chuoi quan lien tiep theo 4 huong (ngang, doc, 2 cheo).
+    Moi chuoi chi duoc tinh 1 lan (tai quan dau chuoi). Diem cua `player`
+    tru diem cua doi thu.
+    """
+    grid = board.grid
+    size = board.size
+    win_len = board.win_length
+    totals = {X: 0, O: 0}
 
-def _winner_from_grid(grid, length):
-    rows = len(grid)
-    cols = len(grid[0]) if rows else 0
-    for r in range(rows):
-        for c in range(cols):
-            player = grid[r][c]
-            if player == EMPTY:
+    for r in range(size):
+        row = grid[r]
+        for c in range(size):
+            p = row[c]
+            if p == EMPTY:
                 continue
             for dr, dc in DIRECTIONS:
-                end_r = r + (length - 1) * dr
-                end_c = c + (length - 1) * dc
-                if not (0 <= end_r < rows and 0 <= end_c < cols):
-                    continue
-                if all(grid[r + k * dr][c + k * dc] == player for k in range(length)):
-                    return player
-    return EMPTY
-
-
-def _winner(board):
-    # Dung check_winner() cua board.py; fallback cho ma tran truc tiep.
-    if hasattr(board, "check_winner"):
-        return board.check_winner()
-    return _winner_from_grid(_grid(board), _win_length(board))
-
-
-def _is_full(board):
-    if hasattr(board, "is_full"):
-        return board.is_full()
-    return all(cell != EMPTY for row in _grid(board) for cell in row)
-
-
-def _pattern_score(length, open_ends):
-    """Diem theo dung bang heuristic trong phan cong."""
-    if length >= 5:
-        return WIN_SCORE
-    scores = {
-        (4, 2): 10_000,
-        (4, 1): 1_000,
-        (3, 2): 1_000,
-        (3, 1): 100,
-    }
-    return scores.get((length, open_ends), 0)
-
-
-def _evaluate_one_player(grid, player):
-    rows = len(grid)
-    cols = len(grid[0]) if rows else 0
-    total = 0
-
-    for r in range(rows):
-        for c in range(cols):
-            if grid[r][c] != player:
-                continue
-            for dr, dc in DIRECTIONS:
-                # Chi danh gia tai dau chuoi de tranh dem lap.
                 pr, pc = r - dr, c - dc
-                if 0 <= pr < rows and 0 <= pc < cols and grid[pr][pc] == player:
+                # Neu o truoc cung la quan cua p => chuoi nay da duoc tinh roi
+                if 0 <= pr < size and 0 <= pc < size and grid[pr][pc] == p:
                     continue
 
-                length = 0
-                nr, nc = r, c
-                while 0 <= nr < rows and 0 <= nc < cols and grid[nr][nc] == player:
+                # Dem do dai chuoi
+                length = 1
+                nr, nc = r + dr, c + dc
+                while 0 <= nr < size and 0 <= nc < size and grid[nr][nc] == p:
                     length += 1
                     nr += dr
                     nc += dc
 
-                before_r, before_c = r - dr, c - dc
+                if length >= win_len:                 # Chuoi 5: +vo cung
+                    totals[p] += WIN_SCORE
+                    continue
+                if length < 2 or length not in SCORES:
+                    continue
+
+                # Kiem tra 2 dau co ho (o trong) khong
                 open_ends = 0
-                if 0 <= before_r < rows and 0 <= before_c < cols and grid[before_r][before_c] == EMPTY:
+                if 0 <= pr < size and 0 <= pc < size and grid[pr][pc] == EMPTY:
                     open_ends += 1
-                if 0 <= nr < rows and 0 <= nc < cols and grid[nr][nc] == EMPTY:
+                if 0 <= nr < size and 0 <= nc < size and grid[nr][nc] == EMPTY:
                     open_ends += 1
-                total += _pattern_score(length, open_ends)
+                if open_ends:
+                    totals[p] += SCORES[length][open_ends - 1]
+
+    return totals[player] - totals[-player]
+
+
+# --------------------------------------------------------------------------- #
+# 2. SAP XEP NUOC DI (giup Alpha-Beta cat tia nhieu hon + gioi han nhanh)
+# --------------------------------------------------------------------------- #
+_RUN_VALUE = {1: 1, 2: 10, 3: 100, 4: 1_000}
+
+
+def _local_score(board: Board, row: int, col: int, player: int) -> int:
+    """Diem nhanh cho viec dat `player` vao (row, col): noi chuoi cua minh + chan doi thu."""
+    grid = board.grid
+    size = board.size
+    total = 0
+    for dr, dc in DIRECTIONS:
+        for who, weight in ((player, 10), (-player, 9)):
+            n = 1
+            for sign in (1, -1):
+                r, c = row + sign * dr, col + sign * dc
+                while 0 <= r < size and 0 <= c < size and grid[r][c] == who:
+                    n += 1
+                    r += sign * dr
+                    c += sign * dc
+            total += weight * (100_000 if n >= 5 else _RUN_VALUE.get(n, 0))
     return total
 
 
-def evaluate_board(board):
-    """Danh gia tu goc nhin X: diem duong tot cho X, diem am tot cho O."""
-    grid = _grid(board)
-    winner = _winner(board)
-    if winner == X_PLAYER:
-        return float(WIN_SCORE)
-    if winner == O_PLAYER:
-        return float(-WIN_SCORE)
-    return float(
-        _evaluate_one_player(grid, X_PLAYER)
-        - _evaluate_one_player(grid, O_PLAYER)
+def _ordered_moves(board: Board, player: int, max_branch: int) -> List[Tuple[int, int]]:
+    """Lay cac nuoc di ung vien (ban kinh 1), sap xep tot -> xau, cat con max_branch."""
+    moves = board.get_candidate_moves(radius=1)
+    if len(moves) <= 1:
+        return moves
+    mid = board.size // 2
+    moves.sort(
+        key=lambda m: (-_local_score(board, m[0], m[1], player),
+                       abs(m[0] - mid) + abs(m[1] - mid))
     )
-
-def _get_moves(board, radius=1):
-    if hasattr(board, "get_candidate_moves"):
-        return board.get_candidate_moves(radius=radius)
-    grid = _grid(board)
-    rows, cols = len(grid), len(grid[0])
-    occupied = [(r, c) for r in range(rows) for c in range(cols) if grid[r][c] != EMPTY]
-    if not occupied:
-        return [(rows // 2, cols // 2)]
-    moves = set()
-    for r, c in occupied:
-        for dr in range(-radius, radius + 1):
-            for dc in range(-radius, radius + 1):
-                nr, nc = r + dr, c + dc
-                if 0 <= nr < rows and 0 <= nc < cols and grid[nr][nc] == EMPTY:
-                    moves.add((nr, nc))
-    return sorted(moves)
+    return moves[:max_branch]
 
 
-def _make_child(board, move, player):
-    r, c = move
-    if hasattr(board, "clone") and hasattr(board, "make_move"):
-        child = board.clone()
-        if not child.make_move(r, c, player):
-            raise ValueError(f"Nuoc di khong hop le: {move}")
-        return child
-    child = [row[:] for row in _grid(board)]
-    if child[r][c] != EMPTY:
-        raise ValueError(f"O {move} da co quan")
-    child[r][c] = player
-    return child
+# --------------------------------------------------------------------------- #
+# 3. MINIMAX THUAN
+# --------------------------------------------------------------------------- #
+def minimax(board: Board, depth: int, is_maximizing: bool, node_counter: List[int],
+            ai_player: int = X, max_branch: int = DEFAULT_MAX_BRANCH) -> float:
+    """Minimax duyet cay den do sau `depth`. Tang node_counter[0] moi node ghe tham.
 
+    ai_player    : ben dang MAX (diem duoc tinh theo goc nhin cua ben nay).
+    is_maximizing: True neu den luot ai_player, False neu den luot doi thu.
+    """
+    node_counter[0] += 1
 
-def _ordered_moves(board, moves, player, candidate_limit):
-    """Uu tien nuoc di tao the co tot; candidate_limit=None de xet tat ca."""
-    ranked = []
-    for move in moves:
-        child = _make_child(board, move, player)
-        if _winner(child) == player:
-            score = WIN_SCORE
-        else:
-            score = evaluate_board(child)
-        # X muon diem cao, O muon diem thap.
-        ranked.append((score if player == X_PLAYER else -score, move))
-    ranked.sort(key=lambda item: item[0], reverse=True)
-    ordered = [move for _, move in ranked]
-    if candidate_limit is not None:
-        ordered = ordered[:max(1, candidate_limit)]
-    return ordered
+    if board.winner != EMPTY:
+        # +depth de uu tien thang som / thua muon
+        return (WIN_SCORE + depth) if board.winner == ai_player else -(WIN_SCORE + depth)
+    if board.is_full():
+        return 0
+    if depth == 0:
+        return evaluate_board(board, ai_player)
 
-
-def minimax(board, depth, is_maximizing, node_counter=None, candidate_limit=12):
-    """Minimax khong cat tia. is_maximizing=True tuong ung X, False tuong ung O."""
-    _count_nodes(node_counter)
-    winner = _winner(board)
-    if winner == X_PLAYER:
-        return float(WIN_SCORE + depth)
-    if winner == O_PLAYER:
-        return float(-WIN_SCORE - depth)
-    if depth <= 0 or _is_full(board):
-        return evaluate_board(board)
-
-    player = X_PLAYER if is_maximizing else O_PLAYER
-    moves = _get_moves(board)
-    if not moves:
-        return evaluate_board(board)
-    moves = _ordered_moves(board, moves, player, candidate_limit)
+    mover = ai_player if is_maximizing else -ai_player
+    moves = _ordered_moves(board, mover, max_branch)
 
     if is_maximizing:
-        best = -inf
-        for move in moves:
-            best = max(best, minimax(_make_child(board, move, player), depth - 1,
-                                     False, node_counter, candidate_limit))
+        best = -INF
+        for r, c in moves:
+            board.make_move(r, c, mover)
+            best = max(best, minimax(board, depth - 1, False, node_counter, ai_player, max_branch))
+            board.undo_move()
         return best
-    best = inf
-    for move in moves:
-        best = min(best, minimax(_make_child(board, move, player), depth - 1,
-                                 True, node_counter, candidate_limit))
+
+    best = INF
+    for r, c in moves:
+        board.make_move(r, c, mover)
+        best = min(best, minimax(board, depth - 1, True, node_counter, ai_player, max_branch))
+        board.undo_move()
     return best
 
 
-def alpha_beta(board, depth, alpha=-inf, beta=inf, is_maximizing=True,
-               node_counter=None, candidate_limit=12):
-    """Minimax co cat tia Alpha-Beta."""
-    _count_nodes(node_counter)
-    winner = _winner(board)
-    if winner == X_PLAYER:
-        return float(WIN_SCORE + depth)
-    if winner == O_PLAYER:
-        return float(-WIN_SCORE - depth)
-    if depth <= 0 or _is_full(board):
-        return evaluate_board(board)
+# --------------------------------------------------------------------------- #
+# 4. ALPHA-BETA
+# --------------------------------------------------------------------------- #
+def alpha_beta(board: Board, depth: int, alpha: float, beta: float,
+               is_maximizing: bool, node_counter: List[int],
+               ai_player: int = X, max_branch: int = DEFAULT_MAX_BRANCH) -> float:
+    """Minimax co cat tia Alpha-Beta. Cho ket qua giong minimax nhung it node hon."""
+    node_counter[0] += 1
 
-    player = X_PLAYER if is_maximizing else O_PLAYER
-    moves = _get_moves(board)
-    if not moves:
-        return evaluate_board(board)
-    moves = _ordered_moves(board, moves, player, candidate_limit)
+    if board.winner != EMPTY:
+        return (WIN_SCORE + depth) if board.winner == ai_player else -(WIN_SCORE + depth)
+    if board.is_full():
+        return 0
+    if depth == 0:
+        return evaluate_board(board, ai_player)
+
+    mover = ai_player if is_maximizing else -ai_player
+    moves = _ordered_moves(board, mover, max_branch)
 
     if is_maximizing:
-        value = -inf
-        for move in moves:
-            value = max(value, alpha_beta(_make_child(board, move, player), depth - 1,
-                                          alpha, beta, False, node_counter, candidate_limit))
+        value = -INF
+        for r, c in moves:
+            board.make_move(r, c, mover)
+            value = max(value, alpha_beta(board, depth - 1, alpha, beta, False,
+                                          node_counter, ai_player, max_branch))
+            board.undo_move()
             alpha = max(alpha, value)
-            if alpha >= beta:
+            if alpha >= beta:          # cat tia beta
                 break
         return value
 
-    value = inf
-    for move in moves:
-        value = min(value, alpha_beta(_make_child(board, move, player), depth - 1,
-                                      alpha, beta, True, node_counter, candidate_limit))
+    value = INF
+    for r, c in moves:
+        board.make_move(r, c, mover)
+        value = min(value, alpha_beta(board, depth - 1, alpha, beta, True,
+                                      node_counter, ai_player, max_branch))
+        board.undo_move()
         beta = min(beta, value)
-        if alpha >= beta:
+        if alpha >= beta:              # cat tia alpha
             break
     return value
 
 
-def get_best_move_minimax(board, depth=2, player=X_PLAYER, use_alpha_beta=True,
-                          candidate_limit=12):
-    """Tra ve (best_move=(row,col), so_node_da_duyet)."""
-    if player not in (X_PLAYER, O_PLAYER):
-        raise ValueError("player phai la 1 (X) hoac -1 (O)")
-    if _winner(board) != EMPTY or _is_full(board):
-        return None, 0
+# --------------------------------------------------------------------------- #
+# 5. HAM GOI CHINH: TIM NUOC DI TOT NHAT
+# --------------------------------------------------------------------------- #
+def get_best_move_minimax(board: Board, depth: int = 2, player: Optional[int] = None,
+                          use_alpha_beta: bool = True,
+                          max_branch: int = DEFAULT_MAX_BRANCH
+                          ) -> Tuple[Optional[Tuple[int, int]], int]:
+    """Nhan ban co hien tai, tra ve (nuoc di toi uu (row, col), so node da duyet).
 
-    moves = _get_moves(board)
+    player         : quan AI dang choi (X/O). Mac dinh la board.current_player.
+    use_alpha_beta : True -> Alpha-Beta, False -> Minimax thuan.
+    Ham khong lam thay doi ban co goc (lam viec tren ban sao).
+    Neu khong con nuoc di -> (None, so node).
+    """
+    if player is None:
+        player = board.current_player
+
+    work = board.clone()
+    counter = [1]                      # tinh node goc
+    if work.is_terminal():
+        return None, counter[0]
+
+    moves = _ordered_moves(work, player, max_branch)
     if not moves:
-        return None, 0
-    moves = _ordered_moves(board, moves, player, candidate_limit)
-    counter = {"count": 0}
-    best_move = None
-    best_score = -inf if player == X_PLAYER else inf
+        return None, counter[0]
 
-    for move in moves:
-        child = _make_child(board, move, player)
-        next_is_maximizing = (player == O_PLAYER)
+    best_move = moves[0]
+    best_value = -INF
+    alpha, beta = -INF, INF
+
+    for r, c in moves:
+        work.make_move(r, c, player)
         if use_alpha_beta:
-            score = alpha_beta(child, depth - 1, -inf, inf,
-                               next_is_maximizing, counter, candidate_limit)
+            value = alpha_beta(work, depth - 1, alpha, beta, False, counter, player, max_branch)
         else:
-            score = minimax(child, depth - 1, next_is_maximizing,
-                            counter, candidate_limit)
-        if (player == X_PLAYER and score > best_score) or (player == O_PLAYER and score < best_score):
-            best_score, best_move = score, move
-    return best_move, _nodes_value(counter)
+            value = minimax(work, depth - 1, False, counter, player, max_branch)
+        work.undo_move()
+
+        if value > best_value:         # strict '>' : giu nuoc co thu tu uu tien cao hon khi bang diem
+            best_value = value
+            best_move = (r, c)
+        if use_alpha_beta:
+            alpha = max(alpha, best_value)
+
+    return best_move, counter[0]
 
 
-def get_best_move_alpha_beta(board, depth=2, player=X_PLAYER, candidate_limit=12):
-    return get_best_move_minimax(board, depth, player, True, candidate_limit)
-
-
+# --------------------------------------------------------------------------- #
+# TEST NHANH
+# --------------------------------------------------------------------------- #
 if __name__ == "__main__":
-    from board import Board
+    import time
+
+    # Test 1: ban co rong -> di giua
     b = Board()
-    # Tao tinh huong X co bon quan lien tiep, O dang co luot di.
-    for col in range(4):
-        b.make_move(10, col + 8, X_PLAYER)
-        if col < 3:
-            b.make_move(11, col + 8, O_PLAYER)
-    print("Winner:", b.check_winner())
-    print("Heuristic:", evaluate_board(b))
-    print("Minimax:", get_best_move_minimax(b, depth=1, player=X_PLAYER, use_alpha_beta=False))
-    print("Alpha-Beta:", get_best_move_minimax(b, depth=1, player=X_PLAYER, use_alpha_beta=True))
+    print("Ban rong:", get_best_move_minimax(b, depth=2))
+
+    # Test 2: X co 4 quan lien tiep, den luot X -> phai thang
+    b = Board()
+    for i in range(4):
+        b.make_move(5, 5 + i, X)
+        b.make_move(8, 5 + i, O)
+    print("X thang:", get_best_move_minimax(b, depth=2, player=X)[0], "(ky vong (5,4) hoac (5,9))")
+
+    # Test 3: O co 4 quan, den luot X -> phai chan
+    b = Board()
+    b.make_move(10, 10, X)
+    for i in range(4):
+        b.make_move(3, 3 + i, O)
+        if i < 3:
+            b.make_move(12 + i, 12, X)
+    b.current_player = X
+    print("X chan O:", get_best_move_minimax(b, depth=2, player=X)[0], "(ky vong (3,2) hoac (3,7))")
+
+    # Test 4: so sanh node Minimax vs Alpha-Beta tren the co giua van
+    b = Board()
+    seq = [(10, 10), (10, 11), (11, 11), (9, 10), (12, 12), (13, 13), (11, 10), (11, 9)]
+    for r, c in seq:
+        b.make_move(r, c)
+    for d in (1, 2, 3):
+        t0 = time.time()
+        m1, n1 = get_best_move_minimax(b, depth=d, use_alpha_beta=False)
+        t1 = time.time()
+        m2, n2 = get_best_move_minimax(b, depth=d, use_alpha_beta=True)
+        t2 = time.time()
+        print(f"depth={d}: Minimax {m1} nodes={n1:,} ({t1 - t0:.2f}s) | "
+              f"AlphaBeta {m2} nodes={n2:,} ({t2 - t1:.2f}s) | cung nuoc di: {m1 == m2}")
