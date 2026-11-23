@@ -2,10 +2,11 @@ from typing import List, Optional, Tuple
 
 from board import Board, EMPTY, X, O, DIRECTIONS
 
+# --------------------------------------------------------------------------- #
 # HANG SO
-
+# --------------------------------------------------------------------------- #
 INF = float("inf")
-WIN_SCORE = 10 ** 9          
+WIN_SCORE = 10 ** 9          # "vo cung" cho chuoi 5 (huu han de cong/tru depth duoc)
 
 # Bang diem cho chuoi: SCORES[do_dai] = (diem khi ho 1 dau, diem khi ho 2 dau)
 # Chuoi bi chan ca 2 dau => 0 diem (khong the thanh 5).
@@ -15,14 +16,15 @@ SCORES = {
     2: (1, 10),          # khong co trong de bai, them de AI biet phat trien the co
 }
 
-# So nuoc di toi da xet o moi node (sau khi sap xep)
+# So nuoc di toi da xet o moi node (sau khi sap xep). Giu nhanh voi ban 20x20.
 DEFAULT_MAX_BRANCH = 12
 
 
+# --------------------------------------------------------------------------- #
 # 1. HAM LUONG GIA (HEURISTIC)
-
+# --------------------------------------------------------------------------- #
 def evaluate_board(board: Board, player: int = X) -> int:
-
+   
     grid = board.grid
     size = board.size
     win_len = board.win_length
@@ -66,13 +68,14 @@ def evaluate_board(board: Board, player: int = X) -> int:
     return totals[player] - totals[-player]
 
 
+# --------------------------------------------------------------------------- #
 # 2. SAP XEP NUOC DI (giup Alpha-Beta cat tia nhieu hon + gioi han nhanh)
-
+# --------------------------------------------------------------------------- #
 _RUN_VALUE = {1: 1, 2: 10, 3: 100, 4: 1_000}
 
 
 def _local_score(board: Board, row: int, col: int, player: int) -> int:
-    """Diem nhanh cho viec dat `player` vao (row, col): noi chuoi cua minh + chan doi thu."""
+    
     grid = board.grid
     size = board.size
     total = 0
@@ -90,7 +93,7 @@ def _local_score(board: Board, row: int, col: int, player: int) -> int:
 
 
 def _ordered_moves(board: Board, player: int, max_branch: int) -> List[Tuple[int, int]]:
-    """Lay cac nuoc di ung vien (ban kinh 1), sap xep tot -> xau, cat con max_branch."""
+    
     moves = board.get_candidate_moves(radius=1)
     if len(moves) <= 1:
         return moves
@@ -102,15 +105,12 @@ def _ordered_moves(board: Board, player: int, max_branch: int) -> List[Tuple[int
     return moves[:max_branch]
 
 
+# --------------------------------------------------------------------------- #
 # 3. MINIMAX THUAN
-
+# --------------------------------------------------------------------------- #
 def minimax(board: Board, depth: int, is_maximizing: bool, node_counter: List[int],
             ai_player: int = X, max_branch: int = DEFAULT_MAX_BRANCH) -> float:
-    """Minimax duyet cay den do sau `depth`. Tang node_counter[0] moi node ghe tham.
-
-    ai_player    : ben dang MAX (diem duoc tinh theo goc nhin cua ben nay).
-    is_maximizing: True neu den luot ai_player, False neu den luot doi thu.
-    """
+   
     node_counter[0] += 1
 
     if board.winner != EMPTY:
@@ -140,12 +140,13 @@ def minimax(board: Board, depth: int, is_maximizing: bool, node_counter: List[in
     return best
 
 
+# --------------------------------------------------------------------------- #
 # 4. ALPHA-BETA
-
+# --------------------------------------------------------------------------- #
 def alpha_beta(board: Board, depth: int, alpha: float, beta: float,
                is_maximizing: bool, node_counter: List[int],
                ai_player: int = X, max_branch: int = DEFAULT_MAX_BRANCH) -> float:
-    """Minimax co cat tia Alpha-Beta. Cho ket qua giong minimax nhung it node hon."""
+   
     node_counter[0] += 1
 
     if board.winner != EMPTY:
@@ -182,19 +183,14 @@ def alpha_beta(board: Board, depth: int, alpha: float, beta: float,
     return value
 
 
+# --------------------------------------------------------------------------- #
 # 5. HAM GOI CHINH: TIM NUOC DI TOT NHAT
-
+# --------------------------------------------------------------------------- #
 def get_best_move_minimax(board: Board, depth: int = 2, player: Optional[int] = None,
                           use_alpha_beta: bool = True,
                           max_branch: int = DEFAULT_MAX_BRANCH
                           ) -> Tuple[Optional[Tuple[int, int]], int]:
-    """Nhan ban co hien tai, tra ve (nuoc di toi uu (row, col), so node da duyet).
-
-    player         : quan AI dang choi (X/O). Mac dinh la board.current_player.
-    use_alpha_beta : True -> Alpha-Beta, False -> Minimax thuan.
-    Ham khong lam thay doi ban co goc (lam viec tren ban sao).
-    Neu khong con nuoc di -> (None, so node).
-    """
+   
     if player is None:
         player = board.current_player
 
