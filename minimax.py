@@ -1,15 +1,3 @@
-"""Thuat toan Minimax & Alpha-Beta cho Tic-Tac-Toe / Gomoku 20x20.
-
-Thanh vien 2 phu trach file nay. Cac ham chinh:
-    - evaluate_board(board, player)          : ham heuristic danh gia the co
-    - minimax(...)                           : Minimax thuan, dem node
-    - alpha_beta(...)                        : Minimax + cat tia Alpha-Beta, dem node
-    - get_best_move_minimax(...)             : tra ve (nuoc di toi uu, so node da duyet)
-
-Quy uoc diem: diem > 0 co loi cho `player` (quan dang duoc danh gia), < 0 bat loi.
-`node_counter` la list 1 phan tu, vd [0]; moi node ghe tham se tang node_counter[0] them 1.
-"""
-
 from typing import List, Optional, Tuple
 
 from board import Board, EMPTY, X, O, DIRECTIONS
@@ -36,12 +24,7 @@ DEFAULT_MAX_BRANCH = 12
 # 1. HAM LUONG GIA (HEURISTIC)
 # --------------------------------------------------------------------------- #
 def evaluate_board(board: Board, player: int = X) -> int:
-    """Danh gia the co tu goc nhin cua `player`.
-
-    Quet moi chuoi quan lien tiep theo 4 huong (ngang, doc, 2 cheo).
-    Moi chuoi chi duoc tinh 1 lan (tai quan dau chuoi). Diem cua `player`
-    tru diem cua doi thu.
-    """
+   
     grid = board.grid
     size = board.size
     win_len = board.win_length
@@ -92,7 +75,7 @@ _RUN_VALUE = {1: 1, 2: 10, 3: 100, 4: 1_000}
 
 
 def _local_score(board: Board, row: int, col: int, player: int) -> int:
-    """Diem nhanh cho viec dat `player` vao (row, col): noi chuoi cua minh + chan doi thu."""
+    
     grid = board.grid
     size = board.size
     total = 0
@@ -110,7 +93,7 @@ def _local_score(board: Board, row: int, col: int, player: int) -> int:
 
 
 def _ordered_moves(board: Board, player: int, max_branch: int) -> List[Tuple[int, int]]:
-    """Lay cac nuoc di ung vien (ban kinh 1), sap xep tot -> xau, cat con max_branch."""
+    
     moves = board.get_candidate_moves(radius=1)
     if len(moves) <= 1:
         return moves
@@ -127,11 +110,7 @@ def _ordered_moves(board: Board, player: int, max_branch: int) -> List[Tuple[int
 # --------------------------------------------------------------------------- #
 def minimax(board: Board, depth: int, is_maximizing: bool, node_counter: List[int],
             ai_player: int = X, max_branch: int = DEFAULT_MAX_BRANCH) -> float:
-    """Minimax duyet cay den do sau `depth`. Tang node_counter[0] moi node ghe tham.
-
-    ai_player    : ben dang MAX (diem duoc tinh theo goc nhin cua ben nay).
-    is_maximizing: True neu den luot ai_player, False neu den luot doi thu.
-    """
+   
     node_counter[0] += 1
 
     if board.winner != EMPTY:
@@ -167,7 +146,7 @@ def minimax(board: Board, depth: int, is_maximizing: bool, node_counter: List[in
 def alpha_beta(board: Board, depth: int, alpha: float, beta: float,
                is_maximizing: bool, node_counter: List[int],
                ai_player: int = X, max_branch: int = DEFAULT_MAX_BRANCH) -> float:
-    """Minimax co cat tia Alpha-Beta. Cho ket qua giong minimax nhung it node hon."""
+   
     node_counter[0] += 1
 
     if board.winner != EMPTY:
@@ -211,13 +190,7 @@ def get_best_move_minimax(board: Board, depth: int = 2, player: Optional[int] = 
                           use_alpha_beta: bool = True,
                           max_branch: int = DEFAULT_MAX_BRANCH
                           ) -> Tuple[Optional[Tuple[int, int]], int]:
-    """Nhan ban co hien tai, tra ve (nuoc di toi uu (row, col), so node da duyet).
-
-    player         : quan AI dang choi (X/O). Mac dinh la board.current_player.
-    use_alpha_beta : True -> Alpha-Beta, False -> Minimax thuan.
-    Ham khong lam thay doi ban co goc (lam viec tren ban sao).
-    Neu khong con nuoc di -> (None, so node).
-    """
+   
     if player is None:
         player = board.current_player
 
@@ -249,45 +222,3 @@ def get_best_move_minimax(board: Board, depth: int = 2, player: Optional[int] = 
             alpha = max(alpha, best_value)
 
     return best_move, counter[0]
-
-
-# --------------------------------------------------------------------------- #
-# TEST NHANH
-# --------------------------------------------------------------------------- #
-if __name__ == "__main__":
-    import time
-
-    # Test 1: ban co rong -> di giua
-    b = Board()
-    print("Ban rong:", get_best_move_minimax(b, depth=2))
-
-    # Test 2: X co 4 quan lien tiep, den luot X -> phai thang
-    b = Board()
-    for i in range(4):
-        b.make_move(5, 5 + i, X)
-        b.make_move(8, 5 + i, O)
-    print("X thang:", get_best_move_minimax(b, depth=2, player=X)[0], "(ky vong (5,4) hoac (5,9))")
-
-    # Test 3: O co 4 quan, den luot X -> phai chan
-    b = Board()
-    b.make_move(10, 10, X)
-    for i in range(4):
-        b.make_move(3, 3 + i, O)
-        if i < 3:
-            b.make_move(12 + i, 12, X)
-    b.current_player = X
-    print("X chan O:", get_best_move_minimax(b, depth=2, player=X)[0], "(ky vong (3,2) hoac (3,7))")
-
-    # Test 4: so sanh node Minimax vs Alpha-Beta tren the co giua van
-    b = Board()
-    seq = [(10, 10), (10, 11), (11, 11), (9, 10), (12, 12), (13, 13), (11, 10), (11, 9)]
-    for r, c in seq:
-        b.make_move(r, c)
-    for d in (1, 2, 3):
-        t0 = time.time()
-        m1, n1 = get_best_move_minimax(b, depth=d, use_alpha_beta=False)
-        t1 = time.time()
-        m2, n2 = get_best_move_minimax(b, depth=d, use_alpha_beta=True)
-        t2 = time.time()
-        print(f"depth={d}: Minimax {m1} nodes={n1:,} ({t1 - t0:.2f}s) | "
-              f"AlphaBeta {m2} nodes={n2:,} ({t2 - t1:.2f}s) | cung nuoc di: {m1 == m2}")
