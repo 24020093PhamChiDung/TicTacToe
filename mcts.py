@@ -2,7 +2,7 @@ import math
 import random
 
 MAX_SIM_MOVES = 100 # so nuoc toi da 1 lan mo phong
-HEUR_SIM_MOVES = 20 # so nuoc toi da 1 lan mo phong khi dung Heuristic
+HEUR_SIM_MOVES = 24 # so nuoc toi da 1 lan mo phong khi dung Heuristic
 HEURISTIC_RADIUS = 2 # heuristic xet cac o nam gan 2 nuoc di gan nhat
 TREE_BRANCH = 10 # so nuoc di duoc xet theo Heuristic khi mo nut (neu co nhieu hon 10 nuoc thi lay 10 nuoc co diem cao nhat)
 SIM_EPSILON = 0.15 # xac suat chon nuoc di ngau nhien trong buoc simulate (de tranh bi lap trinh vien khai thac)
@@ -229,7 +229,7 @@ def backpropagate(node, result):
 def get_best_move_mcts(board, iterations=1000, c=1.4, mode="Random", player=None):
     """Nhan ban co hien tai, tra ve (nuoc di toi uu, so nut da duyet).
 
-    iterations : so luot lap MCTS (100 -> 5000 khi lam thuc nghiem)
+    iterations : so luot lap MCTS 
     c          : he so kham pha cua UCT (0.5, 1.0, 1.4, 2.0)
     mode       : "Random" hoac "Heuristic" (cho buoc simulate)
     player     : ben se di (mac dinh = board.current_player)
