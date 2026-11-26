@@ -41,22 +41,7 @@ def select(node, c):
         node = max(node.children, key=lambda ch: uct_value(ch, c))
     return node
 
-def expand(node, mode="Random"):
-    if node.state.is_terminal() or not node.untried_moves:
-        return node
-    mover = node.state.current_player
-    if mode == "Heuristic" and not node.ordered:
-        st = node.state
-        node.untried_moves.sort(
-            key=lambda m: _score_cell(st.grid, st.size, m[0], m[1], mover, st.win_length)
-        )
-        node.ordered = True
-    row, col = node.untried_moves.pop()
-    new_state = node.state.clone()
-    new_state.make_move(row, col, mover)
-    child = MCTSNode(new_state, parent=node, move=(row, col), player=mover)
-    node.children.append(child)
-    return child
+
 
 def _dir_info(grid, size, r, c, player, dr, dc):
     """Dat player vao (r, c): chuoi lien tiep theo huong (dr, dc) dai bao nhieu, ho may dau."""

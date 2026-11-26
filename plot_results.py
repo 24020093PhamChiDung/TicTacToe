@@ -1,82 +1,89 @@
-"""Plot MCTS win rate by iteration count and UCT exploration constant."""
-
-import argparse
-from pathlib import Path
-
-import matplotlib.pyplot as plt
+import os
 import pandas as pd
+import matplotlib.pyplot as plt
 
 
-C_VALUES = (0.5, 1.0, 1.4, 2.0)
-REQUIRED_COLUMNS = {"iteration", "c", "mcts_result"}
+def plot_mcts_uct():
+    if not os.path.exists("results_mcts_uct.csv"):
+        print("Khong tim thay file results_mcts_uct.csv. Hay chay benchmark.py truoc!")
+        return
 
+    df = pd.read_csv("results_mcts_uct.csv")
+    plt.figure(figsize=(10, 6))
 
-def _resolve_input(path: Path) -> Path:
-    if path.is_file():
-        return path
-    if path == Path("results.csv") and Path("result.csv").is_file():
-        print("results.csv not found; reading result.csv instead.")
-        return Path("result.csv")
-    raise FileNotFoundError("Results CSV not found: {}".format(path))
+    c_values = sorted(df["c"].unique())
+    markers = ["o", "s", "^", "D"]
 
-
-def plot_results(input_path: Path, output_path: Path) -> None:
-    csv_path = _resolve_input(input_path)
-    results = pd.read_csv(csv_path)
-    missing = REQUIRED_COLUMNS.difference(results.columns)
-    if missing:
-        raise ValueError(
-            "CSV is missing required columns: {}".format(", ".join(sorted(missing)))
-        )
-    if results.empty:
-        raise ValueError("CSV contains no benchmark games: {}".format(csv_path))
-
-    results["mcts_result"] = results["mcts_result"].astype(str).str.lower()
-    invalid_results = set(results["mcts_result"]) - {"win", "loss", "draw"}
-    if invalid_results:
-        raise ValueError(
-            "Unexpected mcts_result values: {}".format(
-                ", ".join(sorted(invalid_results))
-            )
+    for idx, c in enumerate(c_values):
+        sub = df[df["c"] == c].sort_values("iterations")
+        plt.plot(
+            sub["iterations"],
+            sub["win_rate"],
+            marker=markers[idx % len(markers)],
+            linewidth=2,
+            label=f"c = {c}"
         )
 
-    summary = (
-        results.assign(mcts_win=results["mcts_result"].eq("win"))
-        .groupby(["c", "iteration"], as_index=False)
-        .agg(win_rate=("mcts_win", "mean"))
-    )
-    summary["win_rate"] *= 100
-
-    fig, ax = plt.subplots(figsize=(9, 5.5))
-    for c in C_VALUES:
-        curve = summary[summary["c"].round(6) == round(c, 6)].sort_values("iteration")
-        ax.plot(curve["iteration"], curve["win_rate"], marker="o", label="c = {}".format(c))
-
-    ax.set(
-        title="MCTS win rate by iteration and UCT c",
-        xlabel="Iteration",
-        ylabel="Win rate (%)",
-        xlim=(100, 5000),
-        ylim=(0, 100),
-    )
-    ax.grid(True, linestyle="--", alpha=0.4)
-    ax.legend(title="UCT exploration")
-    fig.tight_layout()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=150)
-    plt.close(fig)
-    print("Saved chart to {}".format(output_path))
+    plt.title("Ty le thang cua MCTS theo so luot lap (Iteration) va he so c", fontsize=13, fontweight="bold")
+    plt.xlabel("So luot lap (Iterations)", fontsize=11)
+    plt.ylabel("Ty le thang (%)", fontsize=11)
+    plt.ylim(0, 105)
+    plt.grid(True, linestyle="--", alpha=0.6)
+    plt.legend(title="He so kham pha (c)", fontsize=10)
+    plt.tight_layout()
+    plt.savefig("chart_uct.png", dpi=300)
+    print("Da luu bieu do UCT thanh cong tai: chart_uct.png")
+    plt.close()
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Plot MCTS benchmark win rates.")
-    parser.add_argument("--input", type=Path, default=Path("results.csv"),
-                        help="input CSV (default: results.csv; falls back to result.csv)")
-    parser.add_argument("--output", type=Path, default=Path("chart_uct.png"),
-                        help="chart image path (default: chart_uct.png)")
-    args = parser.parse_args()
-    plot_results(args.input, args.output)
+def plot_minimax_comparison():
+    if not os.path.exists("results_minimax_ab.csv"):
+        return
+
+    df = pd.read_csv("results_minimax_ab.csv")
+    summary = df.groupby("depth")[["minimax_nodes", "alphabeta_nodes"]].mean().reset_index()
+
+    x = range(len(summary))
+    width = 0.35
+
+    plt.figure(figsize=(8, 5))
+    plt.bar([i - width/2 for i in x], summary["minimax_nodes"], width, label="Minimax thuan", color="#e07a5f")
+    plt.bar([i + width/2 for i in x], summary["alphabeta_nodes"], width, label="Minimax + Alpha-Beta", color="#3d405b")
+
+    plt.xticks(list(x), [f"Depth = {d}" for d in summary["depth"]])
+    plt.ylabel("So nut trung binh da duyet (Nodes)", fontsize=11)
+    plt.title("So sanh so nut duyet: Minimax vs Alpha-Beta Pruning", fontsize=12, fontweight="bold")
+    plt.legend()
+    plt.grid(axis="y", linestyle="--", alpha=0.5)
+    plt.tight_layout()
+    plt.savefig("chart_minimax_nodes.png", dpi=300)
+    print("Da luu bieu do so sanh Minimax tai: chart_minimax_nodes.png")
+    plt.close()
+
+
+def plot_rollout_comparison():
+    if not os.path.exists("results_rollout_compare.csv"):
+        return
+
+    df = pd.read_csv("results_rollout_compare.csv")
+    plt.figure(figsize=(7, 5))
+    bars = plt.bar(df["mode"], df["win_rate"], color=["#2a9d8f", "#e9c46a"], width=0.5)
+
+    for bar in bars:
+        yval = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2, yval + 1.5, f"{yval:.1f}%", ha="center", fontweight="bold")
+
+    plt.ylim(0, 105)
+    plt.ylabel("Ty le thang (%)", fontsize=11)
+    plt.title("So sanh hieu nang: Random Rollout vs Heuristic Rollout", fontsize=12, fontweight="bold")
+    plt.grid(axis="y", linestyle="--", alpha=0.5)
+    plt.tight_layout()
+    plt.savefig("chart_rollout.png", dpi=300)
+    print("Da luu bieu do so sanh Rollout tai: chart_rollout.png")
+    plt.close()
 
 
 if __name__ == "__main__":
-    main()
+    plot_mcts_uct()
+    plot_minimax_comparison()
+    plot_rollout_comparison()
