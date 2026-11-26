@@ -7,7 +7,3 @@ __pycache__/
 # File cấu hình cá nhân của VS Code & macOS
 .vscode/
 .DS_Store
-
-# File dữ liệu thực nghiệm & hình ảnh xuất ra sau này
-*.csv
-*.png

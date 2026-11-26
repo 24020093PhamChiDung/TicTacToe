@@ -1,0 +1,3 @@
+mode,wins,draws,losses,win_rate,avg_time_per_move
+MCTS-Heuristic,50,0,0,100.0,0.621
+MCTS-Random,0,0,50,0.0,0.1796
